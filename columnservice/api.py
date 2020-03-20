@@ -6,6 +6,8 @@ from typing import List
 from fastapi import FastAPI, HTTPException, status, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorClient
 from dmwmclient import Client as DMWMClient
+
+# from dmwmclient.restclient import locate_proxycert
 from distributed import Client as DaskClient
 from .models import DatasetSource, DatasetType
 from .filereader import get_file_metadata
@@ -13,24 +15,48 @@ from .filereader import get_file_metadata
 
 logger = logging.getLogger(__name__)
 api = FastAPI()
-muser = os.environ["MONGO_USERNAME"]
-mpass = os.environ["MONGO_PASSWORD"]
-mhost = os.environ["MONGO_HOSTNAME"]
-mclient = AsyncIOMotorClient(f"mongodb://{muser}:{mpass}@{mhost}")
-db = mclient["coffeadb"]
-dmwm = DMWMClient()
-dask = None
+
+
+class Clients:
+    def __init__(self):
+        self.mongo = None
+        self.db = None
+        self.dmwm = None
+        self.dask = None
+
+    async def start(self):
+        muser = os.environ["MONGODB_USERNAME"]
+        mpass = os.environ["MONGODB_PASSWORD"]
+        mhost = os.environ["MONGODB_HOSTNAME"]
+        mdatabase = os.environ["MONGODB_DATABASE"]
+        dscheduler = os.environ["DASK_SCHEDULER"]
+        self.mongo = AsyncIOMotorClient(f"mongodb://{muser}:{mpass}@{mhost}")
+        self.db = self.mongo[mdatabase]
+        logger.info(
+            "Existing collections: %r" % (await self.db.list_collection_names())
+        )
+        self.dmwm = DMWMClient()  # usercert=locate_proxycert())
+        self.dask = await DaskClient(dscheduler, asynchronous=True)
+
+    async def stop(self):
+        self.db = None
+        self.mongo = None
+        self.dmwm = None
+        await self.dask.close()
+        self.dask = None
+
+
+clients = Clients()
 
 
 @api.on_event("startup")
 async def startup():
-    global dask
-    dask = await DaskClient(asynchronous=True)
+    await clients.start()
 
 
 @api.on_event("shutdown")
 async def shutdown():
-    await dask.close()
+    await clients.stop()
 
 
 @api.get("/")
@@ -40,7 +66,7 @@ async def root():
 
 @api.get("/datasets")
 async def get_datasets():
-    return await db.datasets.find().to_list(length=None)
+    return await clients.db.datasets.find().to_list(length=None)
 
 
 @api.post("/datasets")
@@ -56,7 +82,7 @@ async def create_dataset(
     If dbsname is set, interpret it as a DBS global dataset name
     Otherwise, interpret the fileset as an explicit list of LFNs
     """
-    result = await db.datasets.find_one({"name": name}, projection=[])
+    result = await clients.db.datasets.find_one({"name": name}, projection=[])
     if result is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Dataset already exists"
@@ -64,7 +90,9 @@ async def create_dataset(
     dataset = {"name": name}
     if dbsname is not None:
         dataset["source"] = DatasetSource.dbs_global
-        dbsinfo = await dmwm.dbs.jsonmethod("datasets", dataset=dbsname, detail=True)
+        dbsinfo = await clients.dmwm.dbs.jsonmethod(
+            "datasets", dataset=dbsname, detail=True
+        )
         if len(dbsinfo) != 1:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found"
@@ -75,7 +103,7 @@ async def create_dataset(
         dataset["dataset_type"] = dbsinfo["primary_ds_type"]
         fileset = [
             f["logical_file_name"]
-            for f in await dmwm.dbs.jsonmethod("files", dataset=dbsname)
+            for f in await clients.dmwm.dbs.jsonmethod("files", dataset=dbsname)
         ]
     elif fileset is not None:
         dataset["source"] = DatasetSource.user
@@ -86,14 +114,14 @@ async def create_dataset(
             )
         dataset["dataset_type"] = dataset_type
     dataset["nfiles"] = len(fileset)
-    await db.datasets.insert_one(dataset)
+    await clients.db.datasets.insert_one(dataset)
     for lfn in fileset:
         tasks.add_task(_create_file, lfn, dataset)
     return dataset
 
 
 async def _get_dataset(name: str, just_id: bool = False):
-    result = await db.datasets.find_one(
+    result = await clients.db.datasets.find_one(
         {"name": name}, projection=[] if just_id else None
     )
     if result is not None:
@@ -111,8 +139,8 @@ async def get_dataset(name: str):
 @api.delete("/datasets/{name}")
 async def delete_dataset(name: str):
     dataset = await _get_dataset(name, just_id=True)
-    await db.files.delete_many({"dataset_id": dataset["_id"]})
-    await db.datasets.delete_one({"_id": dataset["_id"]})
+    await clients.db.files.delete_many({"dataset_id": dataset["_id"]})
+    await clients.db.datasets.delete_one({"_id": dataset["_id"]})
 
 
 async def _extract_columnset(tree: dict):
@@ -123,33 +151,38 @@ async def _extract_columnset(tree: dict):
         "tree_name": tree["name"],
         "columns": tree.pop("columnset"),
     }
-    result = await db.columnsets.find_one({"hash": columnset["hash"]}, projection=[])
+    result = await clients.db.columnsets.find_one(
+        {"hash": columnset["hash"]}, projection=[]
+    )
     if result is not None:
         # TODO: could check tree name matches
         tree["columnset_id"] = result["_id"]
         return tree
-    await db.columnsets.insert_one(columnset)
+    await clients.db.columnsets.insert_one(columnset)
     tree["columnset_id"] = columnset["_id"]
     return tree
 
 
 async def _create_file(lfn: str, dataset: dict):
+    logger.info("Starting background task _create_file for LFN %s" % lfn)
     file = {"lfn": lfn, "dataset_id": dataset["_id"], "dataset_name": dataset["name"]}
     try:
-        metadata = await dask.submit(get_file_metadata, lfn)
+        metadata = await clients.dask.submit(get_file_metadata, lfn)
         await asyncio.gather(*[_extract_columnset(t) for t in metadata["trees"]])
         file.update(metadata)
         file["available"] = True
     except IOError as ex:
         file["available"] = False
         file["error"] = str(ex)
-    await db.files.insert_one(file)
+    await clients.db.files.insert_one(file)
 
 
 @api.get("/datasets/{dataset_name}/files")
 async def get_files(dataset_name: str):
     dataset = await _get_dataset(dataset_name, just_id=True)
-    return await db.files.find({"dataset_id": dataset["_id"]}).to_list(length=None)
+    return await clients.db.files.find({"dataset_id": dataset["_id"]}).to_list(
+        length=None
+    )
 
 
 def _partition(clusters: List[int], target_size: int, max_size: int, lfn: str = None):
@@ -183,13 +216,13 @@ async def get_partitions(
     max_size: int = 300000,
 ):
     dataset = await _get_dataset(dataset_name, just_id=True)
-    columnset = await db.columnsets.find_one({"name": columnset_name})
+    columnset = await clients.db.columnsets.find_one({"name": columnset_name})
     if columnset is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Columnset not found"
         )
     partitions = []
-    async for file in db.files.find({"dataset_id": dataset["_id"]}):
+    async for file in clients.db.files.find({"dataset_id": dataset["_id"]}):
         tree = [t for t in file["trees"] if t["name"] == columnset["tree_name"]]
         if len(tree) != 1:
             raise HTTPException(
@@ -211,3 +244,13 @@ async def get_partitions(
                 }
             )
     return partitions
+
+
+@api.get("/columnsets")
+async def get_columnsets():
+    return await clients.db.columnsets.find().to_list(None)
+
+
+@api.get("/columnsets/{columnset_name}")
+async def get_columnset(columnset_name):
+    return await clients.db.columnsets.find_one({"name": columnset_name})
