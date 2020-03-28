@@ -61,7 +61,7 @@ async def shutdown():
 
 @api.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"hello": "world"}
 
 
 @api.get("/datasets")
@@ -115,8 +115,7 @@ async def create_dataset(
         dataset["dataset_type"] = dataset_type
     dataset["nfiles"] = len(fileset)
     await clients.db.datasets.insert_one(dataset)
-    for lfn in fileset:
-        tasks.add_task(_create_file, lfn, dataset)
+    tasks.add_task(_create_fileset, fileset, dataset)
     return dataset
 
 
@@ -139,33 +138,35 @@ async def get_dataset(name: str):
 @api.delete("/datasets/{name}")
 async def delete_dataset(name: str):
     dataset = await _get_dataset(name, just_id=True)
-    await clients.db.files.delete_many({"dataset_id": dataset["_id"]})
     await clients.db.datasets.delete_one({"_id": dataset["_id"]})
 
 
 async def _extract_columnset(tree: dict):
-    """Separate output of get_file_metadata into file-specific and common portions"""
+    """Separate output of get_file_metadata into file-specific and common portions
+
+    Operates in-place on the input tree"""
     columnset = {
-        "name": tree["name"],
+        "name": tree["name"],  # TODO: sanitize for URL
         "hash": tree["columnset_hash"],
-        "tree_name": tree["name"],
         "columns": tree.pop("columnset"),
+        "base": None,
     }
     result = await clients.db.columnsets.find_one(
         {"hash": columnset["hash"]}, projection=[]
     )
     if result is not None:
-        # TODO: could check tree name matches
         tree["columnset_id"] = result["_id"]
-        return tree
+        return
+    logging.info(f"Creating new columnset from file: {columnset['hash']}")
     await clients.db.columnsets.insert_one(columnset)
     tree["columnset_id"] = columnset["_id"]
-    return tree
 
 
-async def _create_file(lfn: str, dataset: dict):
-    logger.info("Starting background task _create_file for LFN %s" % lfn)
-    file = {"lfn": lfn, "dataset_id": dataset["_id"], "dataset_name": dataset["name"]}
+async def _get_or_create_lfn(lfn: str):
+    file = {"lfn": lfn}
+    result = await clients.db.files.find_one(file, projection=[])
+    if result is not None:
+        return result
     try:
         metadata = await clients.dask.submit(get_file_metadata, lfn)
         await asyncio.gather(*[_extract_columnset(t) for t in metadata["trees"]])
@@ -175,12 +176,30 @@ async def _create_file(lfn: str, dataset: dict):
         file["available"] = False
         file["error"] = str(ex)
     await clients.db.files.insert_one(file)
+    return file
+
+
+async def _create_fileset(fileset: List[str], dataset: dict):
+    logger.info(
+        f"Starting background task _create_fileset for dataset {dataset['name']}"
+    )
+    fileset = await asyncio.gather(*[_get_or_create_lfn(lfn) for lfn in fileset])
+    update = {"$set": {"fileset": [file["_id"] for file in fileset]}}
+    logger.info(f"Finished _create_fileset for dataset {dataset['name']}")
+    result = await clients.db.datasets.update_one({"_id": dataset["_id"]}, update)
+    if result.modified_count != 1:
+        raise RuntimeError(f"Failed to update dataset {dataset['name']} with file info")
 
 
 @api.get("/datasets/{dataset_name}/files")
 async def get_files(dataset_name: str):
-    dataset = await _get_dataset(dataset_name, just_id=True)
-    return await clients.db.files.find({"dataset_id": dataset["_id"]}).to_list(
+    dataset = await _get_dataset(dataset_name)
+    if "fileset" not in dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Fileset not found in dataset (likely still building)",
+        )
+    return await clients.db.files.find({"_id": {r"$in": dataset["fileset"]}}).to_list(
         length=None
     )
 
@@ -195,7 +214,7 @@ def _partition(clusters: List[int], target_size: int, max_size: int, lfn: str = 
         size = clusters[stop] - clusters[start]
         if size > max_size:
             logger.warning(
-                f"Large cluster found in LFN {lfn} size {size} start {clusters[start]} stop {clusters[stop]}"
+                f"Large cluster found in LFN {lfn} size {size} start {clusters[start]} stop {clusters[stop]}"  # noqa
             )
             n = max(round(size / target_size), 1)
             step = math.ceil(size / n)
@@ -208,28 +227,35 @@ def _partition(clusters: List[int], target_size: int, max_size: int, lfn: str = 
         start, stop = stop, stop + 1
 
 
-@api.get("/datasets/{dataset_name}/partitions")
+@api.get("/datasets/{dataset_name}/columnsets/{columnset_name}/partitions")
 async def get_partitions(
     dataset_name: str,
     columnset_name: str,
     target_size: int = 100000,
     max_size: int = 300000,
 ):
-    dataset = await _get_dataset(dataset_name, just_id=True)
+    dataset = await _get_dataset(dataset_name)
     columnset = await clients.db.columnsets.find_one({"name": columnset_name})
     if columnset is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Columnset not found"
         )
+    base_columnset = columnset["base"]
+    if base_columnset is None:
+        base_columnset = columnset["_id"]
     partitions = []
-    async for file in clients.db.files.find({"dataset_id": dataset["_id"]}):
-        tree = [t for t in file["trees"] if t["name"] == columnset["tree_name"]]
-        if len(tree) != 1:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Columnset not found for this dataset",
-            )
-        tree = tree[0]
+    if "fileset" not in dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Fileset not found in dataset (likely still building)",
+        )
+    valid_files = {
+        "_id": {r"$in": dataset["fileset"]},
+        "available": True,
+        "trees.columnset_id": base_columnset,
+    }
+    async for file in clients.db.files.find(valid_files):
+        tree = [t for t in file["trees"] if t["columnset_id"] == base_columnset][0]
         for start, stop in _partition(
             tree["clusters"], target_size, max_size, file["lfn"]
         ):
@@ -240,7 +266,6 @@ async def get_partitions(
                     "tree_name": tree["name"],
                     "start": start,
                     "stop": stop,
-                    "columnset_id": columnset["_id"],
                 }
             )
     return partitions

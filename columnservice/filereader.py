@@ -67,7 +67,7 @@ def get_file_metadata(file_lfn: str):
                 "dtype": str(interpretation.type),
                 "dimension": dimension,
                 "doc": tree[bname].title.decode("ascii"),
-                "generator": None,
+                "generator": "default",
             }
         if len(columns) == 0:
             continue
@@ -85,7 +85,7 @@ def get_file_metadata(file_lfn: str):
 
 
 if __name__ == "__main__":
-    lfn = "/store/mc/RunIIFall17NanoAODv6/ZH_HToBB_ZToQQ_M125_13TeV_powheg_pythia8/NANOAODSIM/PU2017_12Apr2018_Nano25Oct2019_102X_mc2017_realistic_v7-v1/260000/9E0D57B7-D1B8-EC4F-9CE6-6978F003F700.root"
+    lfn = "/store/mc/RunIIFall17NanoAODv6/ZH_HToBB_ZToQQ_M125_13TeV_powheg_pythia8/NANOAODSIM/PU2017_12Apr2018_Nano25Oct2019_102X_mc2017_realistic_v7-v1/260000/9E0D57B7-D1B8-EC4F-9CE6-6978F003F700.root"  # noqa
     from pprint import pprint
 
     pprint(get_file_metadata(lfn))
