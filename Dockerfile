@@ -22,7 +22,7 @@ RUN /opt/conda/bin/pip install --no-cache-dir \
     fastapi==0.52.0 \
     uvicorn==0.11.3 \
     uproot==3.11.3 \
-    https://github.com/nsmith-/dmwmclient/archive/master.zip
+    https://github.com/nsmith-/dmwmclient/archive/v0.0.3.zip
 
 RUN mkdir /opt/app
 

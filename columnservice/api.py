@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, status, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorClient
 from dmwmclient import Client as DMWMClient
 
-# from dmwmclient.restclient import locate_proxycert
+from dmwmclient.restclient import locate_proxycert
 from distributed import Client as DaskClient
 from .models import DatasetSource, DatasetType
 from .filereader import get_file_metadata
@@ -35,7 +35,7 @@ class Clients:
         logger.info(
             "Existing collections: %r" % (await self.db.list_collection_names())
         )
-        self.dmwm = DMWMClient()  # usercert=locate_proxycert())
+        self.dmwm = DMWMClient(usercert=locate_proxycert())
         self.dask = await DaskClient(dscheduler, asynchronous=True)
 
     async def stop(self):
