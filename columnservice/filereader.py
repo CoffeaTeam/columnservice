@@ -53,7 +53,7 @@ def get_file_metadata(file_lfn: str):
     tnames = set(name.decode("ascii").split(";")[0] for name in tnames)
     for tname in tnames:
         tree = file[tname]
-        columns = {}
+        columns = []
         for bname in tree.keys():
             bname = bname.decode("ascii")
             interpretation = uproot.interpret(tree[bname])
@@ -63,15 +63,18 @@ def get_file_metadata(file_lfn: str):
                 dimension += 1
             if not isinstance(interpretation.type, numpy.dtype):
                 continue
-            columns[bname] = {
-                "dtype": str(interpretation.type),
-                "dimension": dimension,
-                "doc": tree[bname].title.decode("ascii"),
-                "generator": "default",
-            }
+            columns.append(
+                {
+                    "name": bname,
+                    "dtype": str(interpretation.type),
+                    "dimension": dimension,
+                    "doc": tree[bname].title.decode("ascii"),
+                    "generator": "default",
+                }
+            )
         if len(columns) == 0:
             continue
-        columnhash = hashlib.sha256(bson.encode(columns))
+        columnhash = hashlib.sha256(bson.encode({"columns": columns}))
         info["trees"].append(
             {
                 "name": tname,

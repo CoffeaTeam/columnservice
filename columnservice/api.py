@@ -233,6 +233,7 @@ async def get_partitions(
     columnset_name: str,
     target_size: int = 100000,
     max_size: int = 300000,
+    limit: int = None,
 ):
     dataset = await _get_dataset(dataset_name)
     columnset = await clients.db.columnsets.find_one({"name": columnset_name})
@@ -268,6 +269,8 @@ async def get_partitions(
                     "stop": stop,
                 }
             )
+            if limit is not None and len(partitions) == limit:
+                return partitions
     return partitions
 
 
