@@ -6,6 +6,15 @@ from pydantic.json import ENCODERS_BY_TYPE
 ENCODERS_BY_TYPE[ObjectId] = str
 
 
+class CatalogAlgorithmType(str, Enum):
+    prefix = "prefix"
+
+
+class CatalogAlgorithm(BaseModel):
+    algo: CatalogAlgorithmType
+    prefix: str
+
+
 class DatasetSource(str, Enum):
     dbs_global = "dbs_global"
     dbs_phys03 = "dbs_phys03"

@@ -10,7 +10,7 @@ from dmwmclient import Client as DMWMClient
 from dmwmclient.restclient import locate_proxycert
 from distributed import Client as DaskClient
 from .models import DatasetSource, DatasetType
-from .filereader import get_file_metadata
+from coffea.columnservice import get_file_metadata
 
 
 logger = logging.getLogger(__name__)
@@ -62,6 +62,24 @@ async def shutdown():
 @api.get("/")
 async def root():
     return {"hello": "world"}
+
+
+@api.get("/catalog")
+async def get_catalog():
+    # TODO: specify return type
+    return {
+        "catalog": [
+            {"algo": "prefix", "prefix": "root://coffea@cmsxrootd-site.fnal.gov/"},
+            {"algo": "prefix", "prefix": "root://coffea@cmsxrootd.fnal.gov/"},
+            {"algo": "prefix", "prefix": "root://coffea@cms-xrd-global.cern.ch/"},
+        ],
+        "xrootdsource": {
+            "timeout": 20,
+            "chunkbytes": 32 * 1024,
+            "limitbytes": 1024 ** 2,
+            "parallel": False,
+        },
+    }
 
 
 @api.get("/datasets")
@@ -227,6 +245,17 @@ def _partition(clusters: List[int], target_size: int, max_size: int, lfn: str = 
         start, stop = stop, stop + 1
 
 
+async def _get_columnset(columnset_name: str):
+    columnset = await clients.db.columnsets.find_one({"name": columnset_name})
+    if columnset is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Columnset not found"
+        )
+    if columnset["base"] is None:
+        columnset["base"] = columnset["_id"]
+    return columnset
+
+
 @api.get("/datasets/{dataset_name}/columnsets/{columnset_name}/partitions")
 async def get_partitions(
     dataset_name: str,
@@ -235,15 +264,9 @@ async def get_partitions(
     max_size: int = 300000,
     limit: int = None,
 ):
-    dataset = await _get_dataset(dataset_name)
-    columnset = await clients.db.columnsets.find_one({"name": columnset_name})
-    if columnset is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Columnset not found"
-        )
-    base_columnset = columnset["base"]
-    if base_columnset is None:
-        base_columnset = columnset["_id"]
+    dataset, columnset = await asyncio.gather(
+        _get_dataset(dataset_name), _get_columnset(columnset_name)
+    )
     partitions = []
     if "fileset" not in dataset:
         raise HTTPException(
@@ -253,10 +276,10 @@ async def get_partitions(
     valid_files = {
         "_id": {r"$in": dataset["fileset"]},
         "available": True,
-        "trees.columnset_id": base_columnset,
+        "trees.columnset_id": columnset["base"],
     }
     async for file in clients.db.files.find(valid_files):
-        tree = [t for t in file["trees"] if t["columnset_id"] == base_columnset][0]
+        tree = [t for t in file["trees"] if t["columnset_id"] == columnset["base"]][0]
         for start, stop in _partition(
             tree["clusters"], target_size, max_size, file["lfn"]
         ):
@@ -281,4 +304,4 @@ async def get_columnsets():
 
 @api.get("/columnsets/{columnset_name}")
 async def get_columnset(columnset_name):
-    return await clients.db.columnsets.find_one({"name": columnset_name})
+    return await _get_columnset(columnset_name)
