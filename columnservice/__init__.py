@@ -1,4 +1,4 @@
 from .version import __version__
-from .api import api
+from .server import app
 
-__all__ = ["__version__", "api"]
+__all__ = ["__version__", "app"]
