@@ -18,16 +18,17 @@ def test_dataset_lifecycle(cleanup=True):
     assert response.status_code == 200
 
     response = client.get("/datasets/asdf/files")
-    assert response.status_code == 200
     
     retry = 0
-    while (len(response.json()) < nfiles) and (retry < 5):
+    while response.status_code == 404 and retry < 5:
         time.sleep(5)
         response = client.get("/datasets/asdf/files")
-        assert response.status_code == 200
         retry += 1
 
-    print(response.json())
+    assert len(response.json()) == 2
+
+    response = client.get("/datasets/asdf/columnsets/Events-07bb3fb/partitions")
+    assert response.status_code == 200
 
     if cleanup:
         response = client.delete("/datasets/asdf")
@@ -35,7 +36,4 @@ def test_dataset_lifecycle(cleanup=True):
 
 
 if __name__ == '__main__':
-    # test_dataset_lifecycle(False)
-    response = client.get("/datasets/asdf/partitions", params={"columnset_name": "Events"})
-    from pprint import pprint
-    pprint(response.json())
+    test_dataset_lifecycle()

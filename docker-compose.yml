@@ -1,0 +1,55 @@
+version: '3'
+services:
+  columnservice:
+    image: "coffeateam/coffea-columnservice:dev"
+    command: uvicorn --host 0.0.0.0 --reload columnservice:api
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/opt/app
+      - ~/src/coffea:/opt/coffea
+      - ${X509_USER_PROXY}:/tmp/proxy
+    environment:
+      MONGODB_USERNAME: "coffea"
+      MONGODB_PASSWORD: "coffea"
+      MONGODB_DATABASE: "coffeadb"
+      MONGODB_HOSTNAME: "mongodb"
+      DASK_SCHEDULER: "tcp://dask-scheduler:8786"
+      X509_USER_PROXY: "/tmp/proxy"
+      MINIO_HOSTNAME: "minio:9000"
+      MINIO_ACCESS_KEY: "miniocoffeakey"
+      MINIO_SECRET_KEY: "miniocoffeakey"
+      MINIO_SECRET_KEY: "miniocoffeakey"
+      COLUMNSERVICE_BUCKET: "columnservice"
+  mongodb:
+    image: "bitnami/mongodb:latest"
+    ports:
+      - "27017:27017"
+    environment:
+      MONGODB_ROOT_PASSWORD: "password123"
+      MONGODB_USERNAME: "coffea"
+      MONGODB_PASSWORD: "coffea"
+      MONGODB_DATABASE: "coffeadb"
+  minio:
+    image: "bitnami/minio:latest"
+    ports:
+      - "9000:9000"
+    environment:
+      MINIO_ACCESS_KEY: "miniocoffeakey"
+      MINIO_SECRET_KEY: "miniocoffeakey"
+      MINIO_SKIP_CLIENT: "yes"
+  dask-scheduler:
+    image: "coffeateam/coffea-columnservice:dev"
+    command: dask-scheduler
+    ports:
+      - "8786:8786"
+      - "8787:8787"
+  dask-worker:
+    image: "coffeateam/coffea-columnservice:dev"
+    command: dask-worker tcp://dask-scheduler:8786
+    volumes:
+      - ${X509_USER_PROXY}:/tmp/proxy
+      - ~/src/coffea:/opt/coffea
+    environment:
+      X509_USER_PROXY: "/tmp/proxy"
+      COLUMNSERVICE_URL: "http://columnservice:8000"

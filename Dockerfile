@@ -1,4 +1,4 @@
-FROM coffeateam/coffea-dask:0.1.x
+FROM coffeateam/coffea-dask:dev
 
 RUN /opt/conda/bin/pip install --no-cache-dir \
     motor==2.1.0 \
@@ -9,5 +9,3 @@ RUN /opt/conda/bin/pip install --no-cache-dir \
 COPY . .
 
 EXPOSE 8000
-
-ENTRYPOINT ["tini", "-g", "--", "uvicorn", "--host", "0.0.0.0", "columnservice:api"]

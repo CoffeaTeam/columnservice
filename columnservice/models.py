@@ -1,3 +1,4 @@
+from typing import List, Dict, Union
 from enum import Enum
 from pydantic import BaseModel, Extra
 from bson import ObjectId
@@ -33,3 +34,19 @@ class Dataset(BaseModel):
     name: str
     source: DatasetSource = DatasetSource.dbs_global
     dataset_type: DatasetType
+
+
+class Column(BaseModel):
+    name: str
+    dtype: str
+    dimension: int
+    doc: str
+    generator: str
+    packoptions: Dict[str, Union[int, str]]
+    """See https://python-blosc.readthedocs.io/en/latest/reference.html#blosc.pack_array"""
+
+
+class ColumnSet(BaseModel):
+    name: str
+    base: str
+    columns: List[Column]
