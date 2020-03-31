@@ -208,9 +208,18 @@ async def update_dataset_files(dataset_name: str, fileset: List[str]):
     await index_files(dataset, fileset)
 
 
-@router.get("/datasets/{dataset_name}/columnsets", response_model=List[ColumnSet])
+@router.get(
+    "/datasets/{dataset_name}/columnsets",
+    response_model=List[ColumnSet],
+    responses={404: generic_http_error},
+)
 async def get_dataset_columnsets(dataset_name: str):
     dataset = await get_dataset(dataset_name)
+    if "columnsets" not in dataset:
+        raise HTTPException(
+            status_code=HTTP_404_NOT_FOUND,
+            detail="No columnsets found in dataset (likely still building)",
+        )
     out = await services.db.columnsets.find(
         {"_id": {r"$in": dataset["columnsets"]}}
     ).to_list(length=None)
