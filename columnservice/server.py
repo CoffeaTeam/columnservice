@@ -37,7 +37,8 @@ async def get_config():
         "storage": {
             # "type": "filesystem",
             # "args": {"path": "/Users/ncsmith/storage"},
-            "type": "minio",
+            "type": "minio-buffered",
+            "buffersize": int(1e7),
             "bucket": os.environ["COLUMNSERVICE_BUCKET"],
             "args": {
                 "endpoint": os.environ["MINIO_HOSTNAME"],
