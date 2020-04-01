@@ -33,10 +33,13 @@ async def root():
 @app.get("/clientconfig")
 async def get_config():
     # TODO: specify return type?
-    return {
-        "storage": {
-            # "type": "filesystem",
-            # "args": {"path": "/Users/ncsmith/storage"},
+    if "FILESTORE" in os.environ:
+        storage = {
+            "type": "filesystem",
+            "args": {"path": os.environ["FILESTORE"]},
+        }
+    else:
+        storage = {
             "type": "minio-buffered",
             "buffersize": int(1e7),
             "bucket": os.environ["COLUMNSERVICE_BUCKET"],
@@ -46,7 +49,10 @@ async def get_config():
                 "secret_key": os.environ["MINIO_SECRET_KEY"],
                 "secure": False,
             },
-        },
+        }
+
+    return {
+        "storage": storage,
         "file_catalog": [
             {"algo": "prefix", "prefix": "root://coffea@cmsxrootd-site.fnal.gov/"},
             {"algo": "prefix", "prefix": "root://coffea@cmsxrootd.fnal.gov/"},
