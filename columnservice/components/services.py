@@ -53,7 +53,10 @@ class Services:
             secure=False,
         )
         bucket = os.environ["COLUMNSERVICE_BUCKET"]
-        if not await self.run_pool(self.minio.bucket_exists, bucket):
+        if await self.run_pool(self.minio.bucket_exists, bucket):
+            logger.info(f"Existing bucket: {bucket}")
+        else:
+            logger.info(f"Creating new bucket: {bucket}")
             await self.run_pool(self.minio.make_bucket, bucket)
 
     async def start(self):

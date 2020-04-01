@@ -18,7 +18,6 @@ services:
       MINIO_HOSTNAME: "minio:9000"
       MINIO_ACCESS_KEY: "miniocoffeakey"
       MINIO_SECRET_KEY: "miniocoffeakey"
-      MINIO_SECRET_KEY: "miniocoffeakey"
       COLUMNSERVICE_BUCKET: "columnservice"
   mongodb:
     image: "bitnami/mongodb:latest"
