@@ -19,11 +19,24 @@ class Services:
         self.dask = None
         self.minio = None
         self._executor = None
+        self._queries = {}
 
     async def run_pool(self, func, *args):
         return await asyncio.get_event_loop().run_in_executor(
             self._executor, func, *args
         )
+
+    async def group_query(self, key, func, *args, **kwargs):
+        """Group common pennding queries together
+
+        func should be a callable that returns a coroutine
+        """
+        try:
+            return await self._queries[key]
+        except KeyError:
+            self._queries[key] = asyncio.ensure_future(func(*args, **kwargs))
+            await self._queries[key]
+            return await self._queries.pop(key)
 
     async def start_mongo(self):
         muser = os.environ["MONGODB_USERNAME"]

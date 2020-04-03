@@ -45,7 +45,9 @@ async def get_columnset(name: str):
     """Retrieve columnset from database
 
     Raises HTTPException if no columnset exists"""
-    columnset = await services.db.columnsets.find_one({"name": name})
+    columnset = await services.group_query(
+        f"/columnsets/{name}", services.db.columnsets.find_one, {"name": name}
+    )
     if columnset is None:
         raise HTTPException(
             status_code=HTTP_404_NOT_FOUND, detail="Columnset not found"

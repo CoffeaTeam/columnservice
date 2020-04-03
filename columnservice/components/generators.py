@@ -34,7 +34,9 @@ async def get_generator(name: str):
     """Retrieve generator from database
 
     Raises HTTPException if no generator exists"""
-    generator = await services.db.generators.find_one({"name": name})
+    generator = await services.group_query(
+        f"/generators/{name}", services.db.generators.find_one, {"name": name}
+    )
     if generator is None:
         raise HTTPException(
             status_code=HTTP_404_NOT_FOUND, detail="Generator not found"
