@@ -2,7 +2,7 @@ version: '3'
 services:
   columnservice:
     image: "coffeateam/coffea-columnservice:dev"
-    command: uvicorn --host 0.0.0.0 --reload columnservice:app
+    command: uvicorn --host 0.0.0.0 --reload columnservice.server:app
     ports:
       - "8000:8000"
     volumes:
@@ -37,21 +37,22 @@ services:
       MINIO_SECRET_KEY: "miniocoffeakey"
       MINIO_SKIP_CLIENT: "yes"
   dask-scheduler:
-    image: "coffeateam/coffea-dask:dev"
+    image: "coffeateam/coffea-columnservice:dev"
     command: dask-scheduler
     ports:
       - "8786:8786"
       - "8787:8787"
   dask-worker:
-    image: "coffeateam/coffea-dask:dev"
+    image: "coffeateam/coffea-columnservice:dev"
     command: dask-worker tcp://dask-scheduler:8786
     volumes:
       - ${X509_USER_PROXY}:/tmp/proxy
+      - .:/opt/app
     environment:
       X509_USER_PROXY: "/tmp/proxy"
       COLUMNSERVICE_URL: "http://columnservice:8000"
   jupyter:
-    image: "coffeateam/coffea-dask:dev"
+    image: "coffeateam/coffea-columnservice:dev"
     command: jupyter notebook --no-browser --ip 0.0.0.0 --port 8888
     user: "1000:1000"
     ports:
@@ -59,7 +60,8 @@ services:
     volumes:
       - ${X509_USER_PROXY}:/tmp/proxy
       - .:/opt/app
+      - ./jupyter:/opt/jupyter
     environment:
-      HOME: "/opt/app"
+      HOME: "/opt/jupyter"
       X509_USER_PROXY: "/tmp/proxy"
       COLUMNSERVICE_URL: "http://columnservice:8000"

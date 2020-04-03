@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from starlette.status import HTTP_400_BAD_REQUEST
 from .services import services
-from coffea.columnservice import get_file_metadata
+from ...client import get_file_metadata
 from ..common import ObjectIdStr, DBModel
 
 

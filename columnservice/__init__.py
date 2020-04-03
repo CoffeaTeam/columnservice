@@ -1,4 +1,4 @@
 from .version import __version__
-from .server import app
+from .client import ColumnClient
 
-__all__ = ["__version__", "app"]
+__all__ = ["__version__", "ColumnClient"]
