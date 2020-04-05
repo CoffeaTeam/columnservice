@@ -6,7 +6,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - .:/opt/app
+      - .:/src/columnservice
       - ${X509_USER_PROXY}:/tmp/proxy
     environment:
       MONGODB_USERNAME: "coffea"
@@ -47,7 +47,7 @@ services:
     command: dask-worker tcp://dask-scheduler:8786
     volumes:
       - ${X509_USER_PROXY}:/tmp/proxy
-      - .:/opt/app
+      - .:/src/columnservice
     environment:
       X509_USER_PROXY: "/tmp/proxy"
       COLUMNSERVICE_URL: "http://columnservice:8000"
@@ -59,7 +59,7 @@ services:
       - "8888:8888"
     volumes:
       - ${X509_USER_PROXY}:/tmp/proxy
-      - .:/opt/app
+      - .:/src/columnservice
       - ./jupyter:/opt/jupyter
     environment:
       HOME: "/opt/jupyter"

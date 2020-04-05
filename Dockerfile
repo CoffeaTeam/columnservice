@@ -1,8 +1,8 @@
 FROM coffeateam/coffea-dask:0.1.19
 
-COPY . .
+COPY . /src/columnservice
 
-RUN /opt/conda/bin/pip install --editable .[server]
+RUN cd /src/columnservice && /opt/conda/bin/pip install --editable .[server] && cd /opt/app
 
 RUN apt-get update \
     && apt-get install -y htop \
