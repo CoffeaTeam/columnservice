@@ -5,8 +5,13 @@ from enum import Enum
 from typing import List, Union
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from starlette.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
-from ..common import generic_http_error, DBModel
+from starlette.status import (
+    HTTP_202_ACCEPTED,
+    HTTP_400_BAD_REQUEST,
+    HTTP_404_NOT_FOUND,
+    HTTP_409_CONFLICT,
+)
+from ..common import generic_accepted, generic_http_error, DBModel
 from .services import services
 from .columnsets import ColumnSet, get_columnset
 from .files import File, create_lfn
@@ -31,6 +36,7 @@ class Dataset(DBModel):
     source: DatasetSource
     type: DatasetType
     nfiles: int
+    available: bool = False
     pathexpr: str = None
     prep_id: str = None
 
@@ -54,12 +60,16 @@ class Partition(BaseModel):
 async def index_files(dataset, fileset: List[str]):
     logger.info(f"Starting index_files for dataset {dataset['name']}")
     fileset = await asyncio.gather(*[create_lfn(lfn) for lfn in fileset])
+    base_columnsets = set()
+    for file in fileset:
+        if file["available"]:
+            for tree in file["trees"]:
+                base_columnsets.add(tree["columnset_id"])
     update = {
         "$set": {
             "fileset": [file["_id"] for file in fileset],
-            "columnsets": list(
-                set(tree["columnset_id"] for file in fileset for tree in file["trees"])
-            ),
+            "columnsets": list(base_columnsets),
+            "available": True,
         }
     }
     result = await services.db.datasets.update_one({"_id": dataset["_id"]}, update)
@@ -117,8 +127,8 @@ async def get_dataset(name: str):
 
 @router.post(
     "/datasets",
-    response_model=Dataset,
-    responses={404: generic_http_error, 400: generic_http_error},
+    status_code=HTTP_202_ACCEPTED,
+    responses={202: generic_accepted, 404: generic_http_error, 400: generic_http_error},
 )
 async def create_dataset(new_dataset: NewDataset, tasks: BackgroundTasks = None):
     """Create a new dataset"""
@@ -178,7 +188,7 @@ async def create_dataset(new_dataset: NewDataset, tasks: BackgroundTasks = None)
     dataset = dataset.dict()
     await services.db.datasets.insert_one(dataset)
     tasks.add_task(index_files, dataset, fileset)
-    return dataset
+    return {"detail": "Starting file indexing"}
 
 
 @router.delete("/datasets/{name}")
@@ -201,11 +211,15 @@ async def get_files(dataset_name: str):
 
 @router.put(
     "/datasets/{dataset_name}/files",
-    responses={400: generic_http_error, 404: generic_http_error},
+    status_code=HTTP_202_ACCEPTED,
+    responses={202: generic_accepted, 400: generic_http_error, 404: generic_http_error},
 )
-async def update_dataset_files(dataset_name: str, fileset: List[str]):
+async def update_dataset_files(
+    dataset_name: str, fileset: List[str], tasks: BackgroundTasks = None
+):
     dataset = await get_dataset(dataset_name)
-    await index_files(dataset, fileset)
+    tasks.add_task(index_files, dataset, fileset)
+    return {"detail": "Starting file indexing"}
 
 
 @router.get(

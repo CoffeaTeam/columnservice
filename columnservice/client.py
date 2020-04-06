@@ -242,7 +242,7 @@ class ColumnClient:
             pfn = self._lfn2pfn(lfn, fallback)
             return uproot.open(pfn, xrootdsource=self._xrootdsource_metadata)
         except IOError as ex:
-            if fallback == len(self.catalog) - 1:
+            if fallback == len(self._file_catalog) - 1:
                 raise
             logger.info("Fallback due to IOError in FileOpener: " + str(ex))
             return self.open_file_metadata(lfn, fallback + 1)
@@ -255,7 +255,7 @@ class ColumnClient:
             pfn = self._lfn2pfn(lfn, fallback)
             return uproot.open(pfn, xrootdsource=self._xrootdsource)
         except IOError as ex:
-            if fallback == len(self.catalog) - 1:
+            if fallback == len(self._file_catalog) - 1:
                 raise
             logger.info("Fallback due to IOError in FileOpener: " + str(ex))
             return self.open_file(lfn, fallback + 1)

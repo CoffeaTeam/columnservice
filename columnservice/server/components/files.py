@@ -46,7 +46,7 @@ async def _extract_columnset(tree: dict):
     columnset = {
         "name": tree["name"]
         + "-"
-        + tree["columnset_hash"][:7],  # TODO: sanitize for URL?
+        + tree["columnset_hash"][:7],  # TODO: sanitize name for URL?
         "hash": tree["columnset_hash"],
         "columns": columns,
         "base": None,
@@ -58,12 +58,13 @@ async def _extract_columnset(tree: dict):
 async def _update_file_metadata(file):
     try:
         metadata = await services.dask.submit(get_file_metadata, file["lfn"])
-        await asyncio.gather(*[_extract_columnset(t) for t in metadata["trees"]])
-        file.update(metadata)
-        file["available"] = True
-    except IOError as ex:
+    except Exception as ex:
         file["available"] = False
         file["error"] = str(ex)
+        return
+    await asyncio.gather(*[_extract_columnset(t) for t in metadata["trees"]])
+    file.update(metadata)
+    file["available"] = True
 
 
 @router.post("/files", response_model=File)

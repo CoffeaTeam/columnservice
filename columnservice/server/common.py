@@ -7,6 +7,10 @@ class GenericHTTPError(BaseModel):
     detail: str
 
 
+class GenericAccpted(BaseModel):
+    detail: str
+
+
 class ObjectIdStr(str):
     @classmethod
     def __get_validators__(cls):
@@ -26,4 +30,5 @@ class DBModel(BaseModel):
         json_encoders = {ObjectId: lambda x: str(x)}
 
 
+generic_accepted = {"description": "Request accepted", "model": GenericAccpted}
 generic_http_error = {"description": "Application error", "model": GenericHTTPError}
