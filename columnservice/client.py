@@ -6,6 +6,7 @@ import os
 from functools import lru_cache
 from threading import Lock
 from collections.abc import Mapping, MutableMapping
+from collections import defaultdict
 import numpy
 import uproot
 import httpx
@@ -29,6 +30,31 @@ def _default_server():
 logger = logging.getLogger(__name__)
 
 
+class Counters:
+    def __init__(self):
+        self.counters = defaultdict(int)
+        self._lock = Lock()
+
+    def inc(self, name, val):
+        with self._lock:
+            self.counters[name] += val
+
+
+counters = Counters()
+
+
+if not hasattr(uproot.source.xrootd.XRootDSource, "_read_columnservice"):
+
+    def _read(self, chunkindex):
+        counters.inc("xrootd_read", self._chunkbytes)
+        return self._read_columnservice(chunkindex)
+
+    uproot.source.xrootd.XRootDSource._read_columnservice = (
+        uproot.source.xrootd.XRootDSource._read
+    )
+    uproot.source.xrootd.XRootDSource._read = _read
+
+
 class FilesystemMutableMapping(MutableMapping):
     def __init__(self, path):
         """(ab)use a filesystem as a mutable mapping"""
@@ -37,7 +63,12 @@ class FilesystemMutableMapping(MutableMapping):
     def __getitem__(self, key):
         try:
             with open(os.path.join(self._path, key), "rb") as fin:
-                return fin.read()
+                value = fin.read()
+            if len(value) == 0:
+                # Failure to write seen sometimes?
+                raise KeyError
+            counters.inc("filesystem_read", len(value))
+            return value
         except FileNotFoundError:
             raise KeyError
 
@@ -46,6 +77,7 @@ class FilesystemMutableMapping(MutableMapping):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as fout:
             fout.write(value)
+        counters.inc("filesystem_write", len(value))
 
     def __delitem__(self, key):
         os.remove(os.path.join(self._path, key))
@@ -73,10 +105,10 @@ class ReadBuffer(MutableMapping):
             with self.lock:
                 return self.cache[key]
         except KeyError:
-            out = self.base[key]
+            value = self.base[key]
             with self.lock:
-                self.cache[key] = out
-            return out
+                self.cache[key] = value
+            return value
 
     def __setitem__(self, key, value):
         self.base[key] = value
@@ -103,11 +135,14 @@ class S3MutableMapping(MutableMapping):
 
     def __getitem__(self, key):
         try:
-            return self._s3.get_object(self._bucket, key).data
+            value = self._s3.get_object(self._bucket, key).data
+            counters.inc("s3_read", len(value))
+            return value
         except NoSuchKey:
             raise KeyError
 
     def __setitem__(self, key, value):
+        counters.inc("s3_write", len(value))
         self._s3.put_object(self._bucket, key, BytesIO(value), len(value))
 
     def __delitem__(self, key):
