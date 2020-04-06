@@ -130,26 +130,21 @@ class NanoFilter:
     def name(self):
         return "nanofilter-" + self.filter_column
 
-    def dig(self, events, colname):
-        prefix, *col = colname.split("_")
-        col = "_".join(col)
-        if col == "":
-            if prefix.startswith("n"):
-                return events[prefix[1:]].counts
-            return events[prefix]
-        return events[prefix][col]
-
     def __call__(self, col, input_columns):
-        from coffea.nanoaod import NanoEvents
-
-        events = NanoEvents.from_arrays(input_columns.arrays())
+        filterdata = input_columns[self.filter_column]
 
         if col["name"] == "_num":
-            return numpy.array(self.dig(events, self.filter_column).sum())
+            return numpy.array(filterdata.sum())
 
-        events = events[self.dig(events, self.filter_column)]
-        out = self.dig(events, col["name"]).flatten()
-        return out.astype(col["dtype"])  # kill any implicit casts
+        coldata = input_columns[col["name"]]
+        if col["dimension"] == 1:
+            return coldata[filterdata]
+        elif col["dimension"] == 2:
+            counts_name = "n" + col["name"].split("_")[0]
+            countsdata = input_columns[counts_name]
+            coldata = awkward.JaggedArray.fromcounts(countsdata, coldata)
+            return coldata[filterdata].flatten()
+        raise NotImplementedError
 
 
 class ColumnClient:
