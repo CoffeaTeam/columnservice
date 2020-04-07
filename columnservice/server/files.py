@@ -4,11 +4,10 @@ from typing import List, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from starlette.status import HTTP_400_BAD_REQUEST
-from .services import services
-from pymongo import ReturnDocument
-from pymongo.errors import DuplicateKeyError
 from ..client import get_file_metadata
+from .services import services
 from .common import ObjectIdStr, DBModel
+from .columnsets import extract_columnset
 
 
 logger = logging.getLogger(__name__)
@@ -33,29 +32,6 @@ class File(DBModel):
 router = APIRouter()
 
 
-async def _extract_columnset(tree: dict):
-    """Separate output of get_file_metadata into file-specific and common portions
-
-    Operates in-place on the input tree"""
-    columns = tree.pop("columnset")
-    columnset = {
-        "name": tree["name"]
-        + "-"
-        + tree["columnset_hash"][:7],  # TODO: sanitize name for URL?
-        "hash": tree["columnset_hash"],
-        "columns": columns,
-        "base": None,
-    }
-    out = await services.db.columnsets.find_one_and_update(
-        columnset,
-        {"$unset": {"noop": None}},
-        {},  # return only _id
-        return_document=ReturnDocument.AFTER,
-        upsert=True,
-    )
-    tree["columnset_id"] = out["_id"]
-
-
 async def _update_file_metadata(file):
     try:
         metadata = await services.dask.submit(get_file_metadata, file["lfn"])
@@ -63,7 +39,7 @@ async def _update_file_metadata(file):
         file["available"] = False
         file["error"] = str(ex)
         return
-    await asyncio.gather(*[_extract_columnset(t) for t in metadata["trees"]])
+    await asyncio.gather(*[extract_columnset(t) for t in metadata["trees"]])
     file.update(metadata)
     file["available"] = True
 

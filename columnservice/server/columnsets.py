@@ -1,8 +1,11 @@
 import logging
+import hashlib
+import json
 from typing import List, Dict, Union, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
+from pymongo import ReturnDocument
 from .common import generic_http_error, DBModel, ObjectIdStr
 from .services import services
 
@@ -24,6 +27,31 @@ class ColumnSet(DBModel):
     name: str
     base: Optional[ObjectIdStr] = ...
     columns: List[Column]
+
+
+async def extract_columnset(tree: dict):
+    """Separate tree metadata into file-specific and common portions
+
+    Operates in-place on the input tree, which should be a dictionary
+    with structure as produced in columnservice.client.get_file_metadata
+    """
+    columns = tree.pop("columnset")
+    columnset = {
+        "name": tree["name"]
+        + "-"
+        + tree["columnset_hash"][:7],  # TODO: sanitize name for URL?
+        "hash": tree["columnset_hash"],
+        "columns": columns,
+        "base": None,
+    }
+    out = await services.db.columnsets.find_one_and_update(
+        columnset,
+        {"$unset": {"noop": None}},
+        {},  # return only _id
+        return_document=ReturnDocument.AFTER,
+        upsert=True,
+    )
+    tree["columnset_id"] = out["_id"]
 
 
 router = APIRouter()
@@ -61,6 +89,7 @@ async def get_columnset(name: str):
     "/columnsets", response_model=ColumnSet, responses={409: generic_http_error}
 )
 async def create_columnset(columnset: ColumnSet):
+    # TODO: handle concurrent calls: upsert? or fail and let client retry?
     result = await services.db.columnsets.find_one(
         {"name": columnset.name}, projection=[]
     )
@@ -69,6 +98,9 @@ async def create_columnset(columnset: ColumnSet):
             status_code=HTTP_409_CONFLICT, detail="Columnset already exists"
         )
     columnset = columnset.dict()
+    columnset["hash"] = hashlib.sha256(
+        json.dumps({"columns": columnset["columns"]}).encode()
+    )
     await services.db.columnsets.insert_one(columnset)
     return columnset
 
