@@ -11,7 +11,7 @@ from starlette.status import (
     HTTP_404_NOT_FOUND,
     HTTP_409_CONFLICT,
 )
-from ..common import generic_accepted, generic_http_error, DBModel
+from .common import generic_accepted, generic_http_error, DBModel
 from .services import services
 from .columnsets import ColumnSet, get_columnset
 from .files import File, create_lfn

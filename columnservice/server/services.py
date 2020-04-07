@@ -47,9 +47,10 @@ class Services:
         # await asyncio.sleep(2)  # race with mongo?
         self.mongo = AsyncIOMotorClient(mconn)
         self.db = self.mongo[mdatabase]
-        logger.info(
-            "Existing collections: %r" % (await self.db.list_collection_names())
-        )
+        collections = await self.db.list_collection_names()
+        logger.info("Existing collections: %r" % collections)
+        if "columnsets" not in collections:
+            await self.db.columnsets.create_index("hash", unique=True)
         # TODO: make collections? 'datasets', 'files', 'columnsets', 'generators'
 
     async def start_dmwm(self):

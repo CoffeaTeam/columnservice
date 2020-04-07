@@ -5,8 +5,10 @@ from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from starlette.status import HTTP_400_BAD_REQUEST
 from .services import services
-from ...client import get_file_metadata
-from ..common import ObjectIdStr, DBModel
+from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
+from ..client import get_file_metadata
+from .common import ObjectIdStr, DBModel
 
 
 logger = logging.getLogger(__name__)
@@ -36,13 +38,6 @@ async def _extract_columnset(tree: dict):
 
     Operates in-place on the input tree"""
     columns = tree.pop("columnset")
-    result = await services.db.columnsets.find_one(
-        {"hash": tree["columnset_hash"]}, projection=[]
-    )
-    if result is not None:
-        tree["columnset_id"] = result["_id"]
-        return
-    logging.info(f"Creating new columnset from file: {tree['columnset_hash']}")
     columnset = {
         "name": tree["name"]
         + "-"
@@ -51,8 +46,14 @@ async def _extract_columnset(tree: dict):
         "columns": columns,
         "base": None,
     }
-    await services.db.columnsets.insert_one(columnset)
-    tree["columnset_id"] = columnset["_id"]
+    out = await services.db.columnsets.find_one_and_update(
+        columnset,
+        {"$unset": {"noop": None}},
+        {},  # return only _id
+        return_document=ReturnDocument.AFTER,
+        upsert=True,
+    )
+    tree["columnset_id"] = out["_id"]
 
 
 async def _update_file_metadata(file):

@@ -2,8 +2,11 @@ import logging
 import os
 from fastapi import FastAPI
 
-from .components import datasets, columnsets, generators
-from .components.services import services
+from . import datasets
+from . import columnsets
+from . import generators
+from . import files
+from .services import services
 
 
 logger = logging.getLogger(__name__)
@@ -13,6 +16,7 @@ app = FastAPI()
 app.include_router(datasets.router)
 app.include_router(columnsets.router)
 app.include_router(generators.router)
+app.include_router(files.router)
 
 
 @app.on_event("startup")

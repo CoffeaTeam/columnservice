@@ -3,7 +3,7 @@ from typing import List, Dict, Union, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
-from ..common import generic_http_error, DBModel, ObjectIdStr
+from .common import generic_http_error, DBModel, ObjectIdStr
 from .services import services
 
 
