@@ -375,14 +375,16 @@ def get_file_metadata(file_lfn: str):
                 "packoptions": {},
             }
         )
-        columnhash = hashlib.sha256(json.dumps({"columns": columns}).encode())
+        columnhash = hashlib.sha256(
+            json.dumps({"columns": columns}).encode()
+        ).hexdigest()
         info["trees"].append(
             {
                 "name": tname,
                 "numentries": tree.numentries,
                 "clusters": [0] + list(c[1] for c in tree.clusters()),
                 "columnset": columns,
-                "columnset_hash": columnhash.hexdigest(),
+                "columnset_hash": columnhash,
             }
         )
     return info

@@ -100,7 +100,7 @@ async def create_columnset(columnset: ColumnSet):
     columnset = columnset.dict()
     columnset["hash"] = hashlib.sha256(
         json.dumps({"columns": columnset["columns"]}).encode()
-    )
+    ).hexdigest()
     await services.db.columnsets.insert_one(columnset)
     return columnset
 
