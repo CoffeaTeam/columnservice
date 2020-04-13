@@ -185,7 +185,7 @@ class NanoFilter:
 class ColumnClient:
     server_url = _default_server()
     _state = {}
-    _initlock = Lock()
+    _lock = Lock()
 
     def _initialize(self, config=None):
         if config is None:
@@ -202,12 +202,12 @@ class ColumnClient:
 
     def __init__(self, config=None):
         self.__dict__ = self._state  # borg
-        with self._initlock:
+        with self._lock:
             if not hasattr(self, "_init"):
                 self._initialize(config)
 
     def reinitialize(self, config=None):
-        with self._initlock:
+        with self._lock:
             self._initialize(config)
 
     def _init_storage(self, config):
@@ -225,7 +225,7 @@ class ColumnClient:
             buffer = LRUCache(config["buffersize"], getsizeof=lambda v: len(v))
             base = S3MutableMapping(s3api, config["bucket"])
             return ReadBuffer(buffer, base)
-        raise ValueError("Unrecognized storage type {config['type']}")
+        raise ValueError(f"Unrecognized storage type {config['type']}")
 
     @property
     def storage(self):
@@ -237,28 +237,23 @@ class ColumnClient:
             return algo["prefix"] + lfn
         raise RuntimeError("Unrecognized LFN2PFN algorithm type")
 
-    def open_file_metadata(self, lfn: str, fallback: int = 0):
+    def _open_file(self, lfn: str, fallback: int = 0, for_metadata=False):
         try:
             pfn = self._lfn2pfn(lfn, fallback)
-            return uproot.open(pfn, xrootdsource=self._xrootdsource_metadata)
+            return uproot.open(
+                pfn,
+                xrootdsource=self._xrootdsource_metadata
+                if for_metadata
+                else self._xrootdsource,
+            )
         except IOError as ex:
             if fallback == len(self._file_catalog) - 1:
                 raise
             logger.info("Fallback due to IOError in FileOpener: " + str(ex))
-            return self.open_file_metadata(lfn, fallback + 1)
+            return self._open_file(lfn, fallback + 1)
 
-    @classmethod
-    @lru_cache(maxsize=4)
-    def open_file(cls, lfn: str, fallback: int = 0):
-        self = cls()
-        try:
-            pfn = self._lfn2pfn(lfn, fallback)
-            return uproot.open(pfn, xrootdsource=self._xrootdsource)
-        except IOError as ex:
-            if fallback == len(self._file_catalog) - 1:
-                raise
-            logger.info("Fallback due to IOError in FileOpener: " + str(ex))
-            return self.open_file(lfn, fallback + 1)
+    def open_file(self, lfn: str):
+        return self._open_file(lfn)
 
     @classmethod
     @lru_cache(maxsize=8)
@@ -335,7 +330,7 @@ class ColumnClient:
 
 
 def get_file_metadata(file_lfn: str):
-    file = ColumnClient().open_file_metadata(file_lfn)
+    file = ColumnClient()._open_file(file_lfn, for_metadata=True)
     info = {"uuid": file._context.uuid.hex(), "trees": []}
     tnames = file.allkeys(
         filterclass=lambda cls: issubclass(cls, uproot.tree.TTreeMethods)
@@ -422,9 +417,8 @@ class ColumnHelper(Mapping):
         if name == "_num":
             return numpy.array(self._partition["stop"] - self._partition["start"])
         if self._source is None:
-            self._source = self._client.open_file(self._partition["lfn"])[
-                self._partition["tree_name"]
-            ]
+            file = self._client.open_file(self._partition["lfn"])
+            self._source = file[self._partition["tree_name"]]
         return self._source[name].array(
             entrystart=self._partition["start"],
             entrystop=self._partition["stop"],

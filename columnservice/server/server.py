@@ -63,15 +63,15 @@ async def get_config():
             {"algo": "prefix", "prefix": "root://coffea@cms-xrd-global.cern.ch/"},
         ],
         "xrootdsource_metadata": {
-            "timeout": 20,
+            "timeout": 10,
             "chunkbytes": 32 * 1024,
             "limitbytes": 1024 ** 2,
             "parallel": False,
         },
         "xrootdsource": {
             "timeout": 60,
-            "chunkbytes": 512 * 1024,
-            "limitbytes": 10 * 1024 ** 2,
+            "chunkbytes": 65536,
+            "limitbytes": 16 * 1024 ** 2,
             "parallel": False,
         },
     }
