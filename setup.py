@@ -28,7 +28,16 @@ setup(
     license="BSD 3-clause",
     test_suite="tests",
     install_requires=["httpx==0.12", "minio"],
-    extras_require={"server": ["motor==2.1.0", "fastapi==0.52.0", "uvicorn==0.11.3", "dmwmclient==0.0.4"], "dev": ["flake8", "black", "pytest-asyncio"]},
+    extras_require={
+        "server": [
+            "motor==2.1.0",
+            "fastapi==0.52.0",
+            "uvicorn==0.11.3",
+            "dmwmclient==0.0.4",
+            "python-multipart==0.0.5",
+        ],
+        "dev": ["flake8", "black", "pytest-asyncio"],
+    },
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Science/Research",

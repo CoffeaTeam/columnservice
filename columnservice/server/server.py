@@ -2,17 +2,21 @@ import logging
 import os
 from fastapi import FastAPI
 
-from . import datasets
-from . import columnsets
-from . import generators
-from . import files
-from .services import services
+from columnservice.server import (
+    auth,
+    datasets,
+    columnsets,
+    generators,
+    files,
+)
+from columnservice.server.services import services
 
 
 logger = logging.getLogger(__name__)
 
 
 app = FastAPI()
+app.include_router(auth.router)
 app.include_router(datasets.router)
 app.include_router(columnsets.router)
 app.include_router(generators.router)

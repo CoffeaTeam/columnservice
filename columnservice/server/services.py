@@ -5,6 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from dmwmclient.restclient import locate_proxycert
 from dmwmclient import Client as DMWMClient
 from distributed import Client as DaskClient
+from distributed.security import Security
 from minio import Minio
 
 
@@ -57,7 +58,20 @@ class Services:
         self.dmwm = DMWMClient(usercert=locate_proxycert())
 
     async def start_dask(self):
-        self.dask = await DaskClient(os.environ["DASK_SCHEDULER"], asynchronous=True)
+        tls_path = os.environ.get("TLS_PATH", None)
+        if tls_path is None:
+            self.dask = await DaskClient(
+                os.environ["DASK_SCHEDULER"], asynchronous=True
+            )
+        else:
+            sec = Security(
+                tls_ca_file=os.path.join(tls_path, "ca.crt"),
+                tls_client_cert=os.path.join(tls_path, "hostcert.pem"),
+                require_encryption=True,
+            )
+            self.dask = await DaskClient(
+                os.environ["DASK_SCHEDULER"], asynchronous=True, security=sec
+            )
 
     async def start_minio(self):
         self.minio = Minio(

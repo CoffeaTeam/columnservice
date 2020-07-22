@@ -13,12 +13,14 @@ services:
       MONGODB_PASSWORD: "coffea"
       MONGODB_DATABASE: "coffeadb"
       MONGODB_HOSTNAME: "mongodb"
-      DASK_SCHEDULER: "tcp://dask-scheduler:8786"
+      DASK_SCHEDULER: "tls://dask-scheduler:8786"
       X509_USER_PROXY: "/tmp/proxy"
       MINIO_HOSTNAME: "minio:9000"
       MINIO_ACCESS_KEY: "miniocoffeakey"
       MINIO_SECRET_KEY: "miniocoffeakey"
       COLUMNSERVICE_BUCKET: "columnservice"
+      USER_ALLOWLIST: "ncsmith"
+      TLS_PATH: "/src/columnservice"
   mongodb:
     image: "bitnami/mongodb:latest"
     ports:
@@ -38,13 +40,15 @@ services:
       MINIO_SKIP_CLIENT: "yes"
   dask-scheduler:
     image: "coffeateam/coffea-columnservice:dev"
-    command: dask-scheduler
+    command: dask-scheduler --tls-ca-file /src/columnservice/ca.crt --tls-cert /src/columnservice/hostcert.pem
+    volumes:
+      - .:/src/columnservice
     ports:
       - "8786:8786"
       - "8787:8787"
   dask-worker:
     image: "coffeateam/coffea-columnservice:dev"
-    command: dask-worker tcp://dask-scheduler:8786
+    command: dask-worker --tls-ca-file /src/columnservice/ca.crt --tls-cert /src/columnservice/hostcert.pem tls://dask-scheduler:8786
     volumes:
       - ${X509_USER_PROXY}:/tmp/proxy
       - .:/src/columnservice

@@ -17,6 +17,8 @@ import blosc
 import cloudpickle
 import lz4.frame as lz4f
 from cachetools import LRUCache
+from distributed import Client as DaskClient
+from distributed.security import Security
 
 
 def _default_server():
@@ -230,6 +232,29 @@ class ColumnClient:
     @property
     def storage(self):
         return self._storage
+
+    def get_dask(
+        self,
+        url,
+        userproxy_path=None,
+        ca_path="ca.crt",
+        client_cert_path="dask_client_cert.pem",
+    ):
+        if userproxy_path is None:
+            userproxy_path = os.environ.get(
+                "X509_USER_PROXY", "/tmp/x509up_u%d" % os.getuid()
+            )
+        with open(userproxy_path, "rb") as fin:
+            userproxy = fin.read()
+        clientcert = self._api.post("/clientkey", data={"proxycert": userproxy})
+        with open(client_cert_path, "w") as fout:
+            fout.write(clientcert.text)
+        sec = Security(
+            tls_ca_file=ca_path,
+            tls_client_cert=client_cert_path,
+            require_encryption=True,
+        )
+        return DaskClient(url, security=sec)
 
     def _lfn2pfn(self, lfn: str, catalog_index: int):
         algo = self._file_catalog[catalog_index]
