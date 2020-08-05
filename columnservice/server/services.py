@@ -7,6 +7,8 @@ from dmwmclient import Client as DMWMClient
 from distributed import Client as DaskClient
 from distributed.security import Security
 from minio import Minio
+from columnservice.client.filemanager import FileManager
+from columnservice.server import config
 
 
 logger = logging.getLogger(__name__)
@@ -21,6 +23,7 @@ class Services:
         self.minio = None
         self._executor = None
         self._queries = {}
+        self.filemanager = FileManager(config.filemanager)
 
     async def run_pool(self, func, *args):
         return await asyncio.get_event_loop().run_in_executor(

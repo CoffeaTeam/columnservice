@@ -1,13 +1,14 @@
 import logging
-import os
 from fastapi import FastAPI
 
+from columnservice.version import __version__
 from columnservice.server import (
     auth,
     datasets,
     columnsets,
     generators,
     files,
+    config,
 )
 from columnservice.server.services import services
 
@@ -41,41 +42,9 @@ async def root():
 @app.get("/clientconfig")
 async def get_config():
     # TODO: specify return type?
-    if "FILESTORE" in os.environ:
-        storage = {
-            "type": "filesystem",
-            "args": {"path": os.environ["FILESTORE"]},
-        }
-    else:
-        storage = {
-            "type": "minio-buffered",
-            "buffersize": int(1e7),
-            "bucket": os.environ["COLUMNSERVICE_BUCKET"],
-            "args": {
-                "endpoint": os.environ["MINIO_HOSTNAME"],
-                "access_key": os.environ["MINIO_ACCESS_KEY"],
-                "secret_key": os.environ["MINIO_SECRET_KEY"],
-                "secure": False,
-            },
-        }
+    return config.client_config
 
-    return {
-        "storage": storage,
-        "file_catalog": [
-            {"algo": "prefix", "prefix": "root://coffea@cmsxrootd-site.fnal.gov/"},
-            {"algo": "prefix", "prefix": "root://coffea@cmsxrootd.fnal.gov/"},
-            {"algo": "prefix", "prefix": "root://coffea@cms-xrd-global.cern.ch/"},
-        ],
-        "xrootdsource_metadata": {
-            "timeout": 10,
-            "chunkbytes": 32 * 1024,
-            "limitbytes": 1024 ** 2,
-            "parallel": False,
-        },
-        "xrootdsource": {
-            "timeout": 60,
-            "chunkbytes": 65536,
-            "limitbytes": 16 * 1024 ** 2,
-            "parallel": False,
-        },
-    }
+
+@app.get("/version")
+async def version():
+    return __version__

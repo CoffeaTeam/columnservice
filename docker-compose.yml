@@ -2,7 +2,7 @@ version: '3'
 services:
   columnservice:
     image: "coffeateam/coffea-columnservice:dev"
-    command: uvicorn --host 0.0.0.0 --reload columnservice.server:app
+    command: uvicorn --host 0.0.0.0 columnservice.server:app
     ports:
       - "8000:8000"
     volumes:

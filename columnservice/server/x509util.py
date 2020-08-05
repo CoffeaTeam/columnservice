@@ -4,8 +4,12 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 import datetime
-import os.path
+import os
 
+
+TLS_PATH = os.environ.get("TLS_PATH", os.curdir)
+with open(os.path.join(TLS_PATH, "ca.crt"), "rb") as fin:
+    TLS_CA = fin.read()
 
 COMMON_SUBJECT_ATTRIB = [
     x509.NameAttribute(NameOID.DOMAIN_COMPONENT, "gov"),
@@ -169,11 +173,11 @@ def write_secrets(prefix):
         f.write(server_cert.public_bytes(encoding=serialization.Encoding.PEM,))
 
 
-def create_user_cert(ca_prefix, username, fullname, output_buffer):
+def create_user_cert(username, fullname, output_buffer):
     user_csr, user_key = generate_csr([username, fullname])
-    with open(os.path.join(ca_prefix, "ca.crt"), "rb") as fin:
+    with open(os.path.join(TLS_PATH, "ca.crt"), "rb") as fin:
         ca_cert = x509.load_pem_x509_certificate(fin.read(), default_backend())
-    with open(os.path.join(ca_prefix, "ca.key"), "rb") as fin:
+    with open(os.path.join(TLS_PATH, "ca.key"), "rb") as fin:
         ca_key = serialization.load_pem_private_key(
             fin.read(), b"bananas", default_backend()
         )

@@ -16,7 +16,6 @@ from columnservice.server.services import services
 
 logger = logging.getLogger(__name__)
 USER_ALLOWLIST = os.environ.get("USER_ALLOWLIST", "").split(",")
-TLS_PATH = os.environ.get("TLS_PATH", None)
 CERT_LOCK = asyncio.Lock()
 router = APIRouter()
 
@@ -46,7 +45,7 @@ async def get_clientkey(proxycert: bytes = File(...)):
             )
         async with CERT_LOCK:
             out = await services.run_pool(
-                lambda: create_user_cert(TLS_PATH, username, fullname, BytesIO())
+                lambda: create_user_cert(username, fullname, BytesIO())
             )
     except NetworkError:
         raise HTTPException(

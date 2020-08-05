@@ -4,7 +4,6 @@ from typing import List, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from starlette.status import HTTP_400_BAD_REQUEST
-from ..client import get_file_metadata
 from .services import services
 from .common import ObjectIdStr, DBModel
 from .columnsets import extract_columnset
@@ -34,7 +33,9 @@ router = APIRouter()
 
 async def _update_file_metadata(file):
     try:
-        metadata = await services.dask.submit(get_file_metadata, file["lfn"])
+        metadata = await services.dask.submit(
+            services.columnclient.get_file_metadata, file["lfn"]
+        )
     except Exception as ex:
         file["available"] = False
         file["error"] = str(ex)
