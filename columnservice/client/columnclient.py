@@ -67,9 +67,13 @@ class ColumnClient:
         )
         with open(userproxy_path, "rb") as fin:
             userproxy = fin.read()
-        clientcert = self.api.post("/clientkey", data={"proxycert": userproxy})
+        result = self.api.post("/clientkey", data={"proxycert": userproxy})
+        if result.status_code == 401:
+            raise RuntimeError("Authorization denied while retrieving dask certificate")
+        elif result.status_code != 200:
+            raise RuntimeError("Error while retrieving dask certificate")
         with open(client_cert_path, "w") as fout:
-            fout.write(clientcert.text)
+            fout.write(result.text)
         sec = distributed.security.Security(
             tls_ca_file=ca_path,
             tls_client_cert=client_cert_path,
