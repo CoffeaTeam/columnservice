@@ -55,6 +55,8 @@ class Services:
         logger.info("Existing collections: %r" % collections)
         if "columnsets" not in collections:
             await self.db.columnsets.create_index("hash", unique=True)
+        # if "files" not in collections:
+        #     await self.db.files.create_index("uuid", unique=True)
         # TODO: make collections? 'datasets', 'files', 'columnsets', 'generators'
 
     async def start_dmwm(self):

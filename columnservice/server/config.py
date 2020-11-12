@@ -9,8 +9,7 @@ if "FILESTORE" in os.environ:
     }
 else:
     storage = {
-        "type": "minio-buffered",
-        "buffersize": int(1e7),
+        "type": "minio-blosc",
         "bucket": os.environ["COLUMNSERVICE_BUCKET"],
         "args": {
             "endpoint": os.environ["MINIO_HOSTNAME"],
@@ -26,17 +25,9 @@ filemanager = {
         {"algo": "prefix", "prefix": "root://coffea@cmsxrootd.fnal.gov/"},
         {"algo": "prefix", "prefix": "root://coffea@cms-xrd-global.cern.ch/"},
     ],
-    "xrootdsource_metadata": {
-        "timeout": 10,
-        "chunkbytes": 32 * 1024,
-        "limitbytes": 1024 ** 2,
-        "parallel": False,
-    },
-    "xrootdsource": {
-        "timeout": 60,
-        "chunkbytes": 65536,
-        "limitbytes": 16 * 1024 ** 2,
-        "parallel": False,
+    "uproot_options": {
+        "timeout": 30,
+        "max_num_elements": None,
     },
 }
 

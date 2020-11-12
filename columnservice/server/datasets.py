@@ -13,7 +13,7 @@ from starlette.status import (
 )
 from .common import generic_accepted, generic_http_error, DBModel
 from .services import services
-from .columnsets import ColumnSet, get_columnset
+from .columnsets import get_columnset
 from .files import File, create_lfn
 
 
@@ -224,7 +224,7 @@ async def update_dataset_files(
 
 @router.get(
     "/datasets/{dataset_name}/columnsets",
-    response_model=List[ColumnSet],
+    response_model=List[str],
     responses={404: generic_http_error},
 )
 async def get_dataset_columnsets(dataset_name: str):
@@ -235,12 +235,10 @@ async def get_dataset_columnsets(dataset_name: str):
             detail="No columnsets found in dataset (likely still building)",
         )
     out = await services.db.columnsets.find(
-        {"_id": {r"$in": dataset["columnsets"]}}
+        filter={"_id": {r"$in": dataset["columnsets"]}},
+        projection={"name"},
     ).to_list(length=None)
-    for columnset in out:
-        if columnset["base"] is None:
-            columnset["base"] = columnset["_id"]
-    return out
+    return [cs["name"] for cs in out]
 
 
 @router.get(
@@ -272,7 +270,7 @@ async def get_partitions(
     async for file in services.db.files.find(valid_files):
         tree = [t for t in file["trees"] if t["columnset_id"] == columnset["base"]][0]
         for start, stop in partition(
-            tree["clusters"], target_size, max_size, file["lfn"]
+            tree["common_entry_offsets"], target_size, max_size, file["lfn"]
         ):
             partitions.append(
                 {

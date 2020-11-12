@@ -3,6 +3,7 @@ import os
 import threading
 from collections import defaultdict
 from collections.abc import MutableMapping
+import zict
 
 
 class Counters:
@@ -16,44 +17,6 @@ class Counters:
 
 
 counters = Counters()
-
-
-class CachedMap(MutableMapping):
-    def __init__(self, cache, base):
-        """A cache-wrapped mutable mapping
-
-        Reads will call into cache first, and then base.
-        Writes will write the value into both cache and base.
-        Deletes will delete from cache (if present) and base.
-        All access is wrapped by a lock.
-        """
-        self.cache = cache
-        self.base = base
-
-    def __getitem__(self, key):
-        try:
-            value = self.cache[key]
-            counters.inc("cache_hit", len(value))
-            return value
-        except KeyError:
-            value = self.base[key]
-            counters.inc("cache_miss", len(value))
-            self.cache[key] = value
-            return value
-
-    def __setitem__(self, key, value):
-        self.base[key] = value
-        self.cache[key] = value
-
-    def __delitem__(self, key):
-        del self.base[key]
-        self.cache.pop(key, None)
-
-    def __iter__(self):
-        return iter(self.base)
-
-    def __len__(self):
-        return len(self.base)
 
 
 class ThreadsafeMap(MutableMapping):
@@ -152,6 +115,26 @@ class S3MutableMapping(MutableMapping):
         raise NotImplementedError("No performant way to count bucket size")
 
 
+class NullMapping(MutableMapping):
+    def __init__(self):
+        """Has nothing in it, always"""
+
+    def __getitem__(self, key):
+        raise KeyError
+
+    def __setitem__(self, key, value):
+        pass
+
+    def __delitem__(self, key):
+        raise KeyError
+
+    def __iter__(self):
+        return iter([])
+
+    def __len__(self):
+        return 0
+
+
 shared_mappings = {}
 setup_lock = threading.Lock()
 
@@ -170,7 +153,9 @@ def setup_mapping(config):
 
 
 def setup_mapping_impl(config):
-    if config["type"] == "filesystem":
+    if config["type"] == "null":
+        return NullMapping()
+    elif config["type"] == "filesystem":
         return FilesystemMutableMapping(**config["args"])
     elif config["type"].startswith("minio"):
         from minio import Minio
@@ -179,9 +164,12 @@ def setup_mapping_impl(config):
         base = S3MutableMapping(s3api, config["bucket"])
         if config["type"] == "minio":
             return base
-        elif config["type"] == "minio-buffered":
-            from cachetools import LRUCache
+        elif config["type"] == "minio-blosc":
+            import blosc
 
-            buffer = LRUCache(config["buffersize"], getsizeof=lambda v: len(v))
-            return CachedMap(buffer, base)
+            return zict.Func(blosc.pack_array, blosc.unpack_array, base)
+        elif config["type"] == "minio-pickle":
+            import pickle
+
+            return zict.Func(pickle.dumps, pickle.loads, base)
     raise ValueError(f"Unrecognized storage type {config['type']}")

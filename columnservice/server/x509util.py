@@ -135,7 +135,8 @@ def sign_csr(ca_cert, ca_key, csr, valid_until=None):
             critical=True,
         )
         .add_extension(
-            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CLIENT_AUTH]), critical=True,
+            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CLIENT_AUTH]),
+            critical=True,
         )
     )
     # for extension in csr.extensions:
@@ -157,7 +158,11 @@ def write_secrets(prefix):
             )
         )
     with open(os.path.join(prefix, "ca.crt"), "wb") as f:
-        f.write(ca_cert.public_bytes(encoding=serialization.Encoding.PEM,))
+        f.write(
+            ca_cert.public_bytes(
+                encoding=serialization.Encoding.PEM,
+            )
+        )
 
     server_cert, server_key = generate_server_cert(
         ca_cert, ca_key, ["Coffea dask cluster"]
@@ -170,7 +175,11 @@ def write_secrets(prefix):
                 encryption_algorithm=serialization.NoEncryption(),
             )
         )
-        f.write(server_cert.public_bytes(encoding=serialization.Encoding.PEM,))
+        f.write(
+            server_cert.public_bytes(
+                encoding=serialization.Encoding.PEM,
+            )
+        )
 
 
 def create_user_cert(username, fullname, output_buffer):
@@ -189,7 +198,11 @@ def create_user_cert(username, fullname, output_buffer):
             encryption_algorithm=serialization.NoEncryption(),
         )
     )
-    output_buffer.write(user_cert.public_bytes(encoding=serialization.Encoding.PEM,))
+    output_buffer.write(
+        user_cert.public_bytes(
+            encoding=serialization.Encoding.PEM,
+        )
+    )
     return output_buffer
 
 

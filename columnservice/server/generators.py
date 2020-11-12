@@ -1,10 +1,9 @@
 import logging
-from typing import List
+from typing import List, Dict
 from fastapi import APIRouter, HTTPException
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
 from .common import generic_http_error, DBModel
 from .services import services
-from .columnsets import Column
 
 
 logger = logging.getLogger(__name__)
@@ -13,7 +12,7 @@ logger = logging.getLogger(__name__)
 class ColumnGenerator(DBModel):
     name: str
     function_key: str
-    input_columns: List[Column]
+    input_columns: List[Dict]
     available: bool = True
 
 

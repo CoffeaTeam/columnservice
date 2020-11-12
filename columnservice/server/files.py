@@ -3,9 +3,9 @@ import logging
 from typing import List, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
-from starlette.status import HTTP_400_BAD_REQUEST
+from starlette.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 from .services import services
-from .common import ObjectIdStr, DBModel
+from .common import ObjectIdStr, DBModel, generic_http_error
 from .columnsets import extract_columnset
 
 
@@ -14,10 +14,9 @@ logger = logging.getLogger(__name__)
 
 class Tree(BaseModel):
     name: str
-    numentries: int
-    clusters: List[int]
+    num_entries: int
+    common_entry_offsets: List[int]
     columnset_id: Optional[ObjectIdStr] = ...
-    columnset_hash: str
 
 
 class File(DBModel):
@@ -25,7 +24,7 @@ class File(DBModel):
     available: bool
     error: str = None
     uuid: str = None
-    trees: List[Tree]
+    trees: List[Tree] = None
 
 
 router = APIRouter()
@@ -34,18 +33,19 @@ router = APIRouter()
 async def _update_file_metadata(file):
     try:
         metadata = await services.dask.submit(
-            services.columnclient.get_file_metadata, file["lfn"]
+            services.filemanager.get_file_metadata, file["lfn"]
         )
     except Exception as ex:
         file["available"] = False
         file["error"] = str(ex)
+        logger.error(f"Exception while updating metadata for {file}: {ex}")
         return
     await asyncio.gather(*[extract_columnset(t) for t in metadata["trees"]])
     file.update(metadata)
     file["available"] = True
 
 
-@router.post("/files", response_model=File)
+@router.post("/files", response_model=File, responses={400: generic_http_error})
 async def create_lfn(lfn: str):
     file = await services.db.files.find_one({"lfn": lfn})
     if file is None:
@@ -69,3 +69,11 @@ async def create_lfn(lfn: str):
                     HTTP_400_BAD_REQUEST, f"Failed to update file {file['lfn']}"
                 )
     return file
+
+
+@router.get("/files/lfn", responses={404: generic_http_error})
+async def get_lfn(uuid: str):
+    file = await services.db.files.find_one({"uuid": uuid})
+    if file is None or not file["available"]:
+        raise HTTPException(HTTP_404_NOT_FOUND, f"Failed to find file for uuid {uuid}")
+    return file["lfn"]

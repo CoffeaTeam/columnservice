@@ -1,8 +1,7 @@
 import logging
 import hashlib
 import json
-from typing import List, Dict, Union, Optional
-from pydantic import BaseModel
+from typing import List, Dict, Optional
 from fastapi import APIRouter, HTTPException
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
 from pymongo import ReturnDocument
@@ -13,20 +12,10 @@ from .services import services
 logger = logging.getLogger(__name__)
 
 
-class Column(BaseModel):
-    name: str
-    dtype: str
-    dimension: int
-    doc: str
-    generator: str
-    packoptions: Dict[str, Union[int, str]]
-    """See https://python-blosc.readthedocs.io/en/latest/reference.html#blosc.pack_array"""  # noqa
-
-
 class ColumnSet(DBModel):
     name: str
     base: Optional[ObjectIdStr] = ...
-    columns: List[Column]
+    columns: Dict
 
 
 async def extract_columnset(tree: dict):
@@ -35,12 +24,12 @@ async def extract_columnset(tree: dict):
     Operates in-place on the input tree, which should be a dictionary
     with structure as produced in columnservice.client.get_file_metadata
     """
-    columns = tree.pop("columnset")
+    columns = tree.pop("base_form")
     columnset = {
         "name": tree["name"]
         + "-"
-        + tree["columnset_hash"][:7],  # TODO: sanitize name for URL?
-        "hash": tree["columnset_hash"],
+        + tree["form_hash"][:7],  # TODO: sanitize name for URL?
+        "hash": tree["form_hash"],
         "columns": columns,
         "base": None,
     }

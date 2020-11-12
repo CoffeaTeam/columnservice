@@ -5,9 +5,83 @@ import distributed
 import distributed.security
 from columnservice.client.mapping import setup_mapping
 from columnservice.client.filemanager import FileManager
+from coffea.nanoevents import NanoEventsFactory
+from coffea.nanoevents.mapping import CachedMapping, UprootSourceMapping
+from coffea.nanoevents.util import tuple_to_key
 
 
 logger = logging.getLogger(__name__)
+
+
+class Dataset:
+    def __init__(self, name, cc):
+        self._name = name
+        self._cc = cc
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def columnsets(self):
+        result = self._cc.api.get(f"/datasets/{self.name}/columnsets")
+        if result.status_code != 200:
+            detail = result.json()["detail"]
+            raise RuntimeError(f"{result.status_code}: {detail}")
+        return {cs: Columnset(cs, self._cc) for cs in result.json()}
+
+    def partitions(self, columnset, schemaclass):
+        if isinstance(columnset, str):
+            columnset = Columnset(columnset, self._cc)
+        elif not isinstance(columnset, Columnset):
+            raise ValueError(
+                f"columnset should be a string or Columnset type, not {columnset}"
+            )
+        result = self._cc.api.get(
+            f"/datasets/{self.name}/columnsets/{columnset.name}/partitions"
+        )
+        if result.status_code != 200:
+            detail = result.json()["detail"]
+            raise RuntimeError(f"{result.status_code}: {detail}")
+        schema = schemaclass(columnset.form)
+        return [Partition(data, schema, self._cc) for data in result.json()]
+
+
+class Columnset:
+    def __init__(self, name, cc):
+        self._name = name
+        self._cc = cc
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def form(self):
+        result = self._cc.api.get(f"/columnsets/{self.name}")
+        if result.status_code != 200:
+            detail = result.json()["detail"]
+            raise RuntimeError(f"{result.status_code}: {detail}")
+        return result.json()["columns"]
+
+
+class Partition:
+    def __init__(self, data, schema, cc):
+        self._data = data
+        self._schema = schema
+        self._cc = cc
+
+    def events(self, runtime_cache=None):
+        mapping = CachedMapping(self._cc.storage, UprootSourceMapping(self._cc))
+        partition_tuple = (
+            self._data["uuid"],
+            self._data["tree_name"],
+            "{0}-{1}".format(self._data["start"], self._data["stop"]),
+        )
+        factory = NanoEventsFactory(
+            self._schema, mapping, tuple_to_key(partition_tuple), cache=runtime_cache
+        )
+        return factory.events()
 
 
 class ColumnClient:
@@ -58,7 +132,11 @@ class ColumnClient:
         return self._filemanager
 
     def get_dask(
-        self, ca_path="dask_ca.crt", client_cert_path="dask_client_cert.pem", port=8786,
+        self,
+        ca_path="dask_ca.crt",
+        client_cert_path="dask_client_cert.pem",
+        hostname=None,
+        port=8786,
     ):
         with open(ca_path, "w") as fout:
             fout.write(self.config["tls_ca"])
@@ -79,5 +157,28 @@ class ColumnClient:
             tls_client_cert=client_cert_path,
             require_encryption=True,
         )
-        url = f"tls://{self.hostname}:{port}"
+        if hostname is None:
+            hostname = self.hostname
+        url = f"tls://{hostname}:{port}"
         return distributed.Client(url, security=sec)
+
+    def register_dataset(self, name, pathexpr, source="dbs-global", type="mc"):
+        data = {
+            "name": name,
+            "source": source,
+            "type": type,
+            "pathexpr": pathexpr,
+        }
+        result = self.api.post("/datasets", json=data)
+        if result.status_code != 202:
+            detail = result.json()["detail"]
+            raise RuntimeError(f"{result.status_code}: {detail}")
+        return Dataset(name, self)
+
+    def open_uuid(self, uuid):
+        result = self.api.get("/files/lfn", params={"uuid": uuid})
+        if result.status_code != 200:
+            detail = result.json()["detail"]
+            raise RuntimeError(f"{result.status_code}: {detail}")
+        lfn = result.json()
+        return self.filemanager.open_file(lfn)

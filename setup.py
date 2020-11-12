@@ -16,7 +16,7 @@ with open(os.path.join("columnservice", "version.py")) as f:
 setup(
     name="columnservice",
     version=about["__version__"],
-    packages=find_packages(exclude=("columnservice-server",)),
+    packages=find_packages(),
     include_package_data=True,
     description="A column management service for coffea",
     long_description=open("README.md", "rb").read().decode("utf8", "ignore"),

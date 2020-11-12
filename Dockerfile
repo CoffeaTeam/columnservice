@@ -1,4 +1,4 @@
-FROM coffeateam/coffea-dask:0.1.20
+FROM coffeateam/coffea-dask:0.1.21
 
 COPY . /src/columnservice
 

@@ -34,14 +34,16 @@ async def get_clientkey(proxycert: bytes = File(...)):
         )
         if len(userdata["result"]) == 0:
             raise HTTPException(
-                HTTP_401_UNAUTHORIZED, "No account record in CRIC",
+                HTTP_401_UNAUTHORIZED,
+                "No account record in CRIC",
             )
         userdata = userdata["result"][0]
         username = userdata["login"]
         fullname = userdata["name"]
         if username not in USER_ALLOWLIST:
             raise HTTPException(
-                HTTP_401_UNAUTHORIZED, "Sorry, your account is not authorized",
+                HTTP_401_UNAUTHORIZED,
+                "Sorry, your account is not authorized",
             )
         async with CERT_LOCK:
             out = await services.run_pool(
@@ -49,11 +51,13 @@ async def get_clientkey(proxycert: bytes = File(...)):
             )
     except NetworkError:
         raise HTTPException(
-            HTTP_401_UNAUTHORIZED, "Failed to authorize",
+            HTTP_401_UNAUTHORIZED,
+            "Failed to authorize",
         )
     except SSLError:
         raise HTTPException(
-            HTTP_401_UNAUTHORIZED, "Failed to authorize",
+            HTTP_401_UNAUTHORIZED,
+            "Failed to authorize",
         )
     finally:
         if tmp:
