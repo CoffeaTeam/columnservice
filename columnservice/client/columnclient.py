@@ -11,7 +11,6 @@ from columnservice.client.filemanager import FileManager
 from coffea.nanoevents import NanoEventsFactory
 from coffea.nanoevents.mapping import CachedMapping, UprootSourceMapping
 from coffea.nanoevents.util import tuple_to_key
-from columnservice.client.daskawkwardarray import DaskAwkwardArray
 
 
 logger = logging.getLogger(__name__)
@@ -85,6 +84,8 @@ class Dataset:
         return dask.bag.from_delayed(map(dask.delayed(builder), parts))
 
     def daskarray(self, columnset, schemaclass, limit=None):
+        from dask_awkward import DaskAwkwardArray
+
         parts, builder = self._partitions(columnset, schemaclass, limit)
         offsets = [0]
         offsets.extend(accumulate((part[3] - part[2] for part in parts)))
