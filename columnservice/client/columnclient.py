@@ -86,7 +86,8 @@ class Dataset:
 
     def daskarray(self, columnset, schemaclass, limit=None):
         parts, builder = self._partitions(columnset, schemaclass, limit)
-        offsets = [0].extend(accumulate((part[3] - part[2] for part in parts)))
+        offsets = [0]
+        offsets.extend(accumulate((part[3] - part[2] for part in parts)))
         return DaskAwkwardArray.from_partitions(parts, builder, offsets)
 
 
