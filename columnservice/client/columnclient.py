@@ -3,11 +3,15 @@ import logging
 import httpx
 import distributed
 import distributed.security
+import dask.delayed
+import dask.bag
+from itertools import accumulate
 from columnservice.client.mapping import setup_mapping
 from columnservice.client.filemanager import FileManager
 from coffea.nanoevents import NanoEventsFactory
 from coffea.nanoevents.mapping import CachedMapping, UprootSourceMapping
 from coffea.nanoevents.util import tuple_to_key
+from columnservice.client.daskawkwardarray import DaskAwkwardArray
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +34,7 @@ class Dataset:
             raise RuntimeError(f"{result.status_code}: {detail}")
         return {cs: Columnset(cs, self._cc) for cs in result.json()}
 
-    def partitions(self, columnset, schemaclass):
+    def _partitions(self, columnset, schemaclass, limit):
         if isinstance(columnset, str):
             columnset = Columnset(columnset, self._cc)
         elif not isinstance(columnset, Columnset):
@@ -38,13 +42,52 @@ class Dataset:
                 f"columnset should be a string or Columnset type, not {columnset}"
             )
         result = self._cc.api.get(
-            f"/datasets/{self.name}/columnsets/{columnset.name}/partitions"
+            f"/datasets/{self.name}/columnsets/{columnset.name}/partitions",
+            params={"limit": limit},
         )
         if result.status_code != 200:
             detail = result.json()["detail"]
             raise RuntimeError(f"{result.status_code}: {detail}")
         schema = schemaclass(columnset.form)
-        return [Partition(data, schema, self._cc) for data in result.json()]
+        parts = result.json()
+
+        # TODO reduce on server side
+        parts = [
+            [
+                part["uuid"],
+                part["tree_name"],
+                part["start"],
+                part["stop"],
+            ]
+            for part in parts
+        ]
+
+        def builder(item):
+            return Partition(
+                {
+                    "uuid": item[0],
+                    "tree_name": item[1],
+                    "start": item[2],
+                    "stop": item[3],
+                },
+                schema,
+                self._cc,
+            ).events()
+
+        return parts, builder
+
+    def iter_partitions(self, columnset, schemaclass, limit=None):
+        parts, builder = self._partitions(columnset, schemaclass, limit)
+        return map(builder, parts)
+
+    def bag(self, columnset, schemaclass, limit=None):
+        parts, builder = self._partitions(columnset, schemaclass, limit)
+        return dask.bag.from_delayed(map(dask.delayed(builder), parts))
+
+    def daskarray(self, columnset, schemaclass, limit=None):
+        parts, builder = self._partitions(columnset, schemaclass, limit)
+        offsets = [0].extend(accumulate((part[3] - part[2] for part in parts)))
+        return DaskAwkwardArray.from_partitions(parts, builder, offsets)
 
 
 class Columnset:
@@ -173,6 +216,9 @@ class ColumnClient:
         if result.status_code != 202:
             detail = result.json()["detail"]
             raise RuntimeError(f"{result.status_code}: {detail}")
+        return Dataset(name, self)
+
+    def get_dataset(self, name):
         return Dataset(name, self)
 
     def open_uuid(self, uuid):
