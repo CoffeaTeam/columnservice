@@ -27,7 +27,7 @@ setup(
     download_url="https://github.com/nsmith-/columnservice/releases",
     license="BSD 3-clause",
     test_suite="tests",
-    install_requires=["httpx==0.12", "minio"],
+    install_requires=["httpx==0.23.0", "minio"],
     extras_require={
         "server": [
             "motor==2.1.0",
